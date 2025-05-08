@@ -6,6 +6,7 @@ import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer
 import GUI from 'lil-gui'
 import particlesVertexShader from './shaders/particles/vertex.glsl'
 import particlesFragmentShader from './shaders/particles/fragment.glsl'
+import gpgpuParticlesShader from './shaders/gpgpu/particles.glsl'
 
 /**
  * Base
@@ -104,7 +105,30 @@ gpgpu.computation = new GPUComputationRenderer(gpgpu.size, gpgpu.size, renderer)
 
 // Base particles
 const baseParticlesTexture = gpgpu.computation.createTexture()
-console.log(baseParticlesTexture)
+
+// Particles variable
+gpgpu.particlesVariable = gpgpu.computation.addVariable(
+  'uParticles',
+  gpgpuParticlesShader,
+  baseParticlesTexture
+)
+gpgpu.computation.setVariableDependencies(gpgpu.particlesVariable, [
+  gpgpu.particlesVariable,
+])
+
+// Init
+gpgpu.computation.init()
+
+// Debug
+gpgpu.debug = new THREE.Mesh(
+  new THREE.PlaneGeometry(3, 3),
+  new THREE.MeshBasicMaterial({
+    map: gpgpu.computation.getCurrentRenderTarget(gpgpu.particlesVariable)
+      .texture,
+  })
+)
+gpgpu.debug.position.x = 3
+scene.add(gpgpu.debug)
 
 /**
  * Particles
@@ -156,6 +180,9 @@ const tick = () => {
 
   // Update controls
   controls.update()
+
+  // GPGPU Update
+  gpgpu.computation.compute()
 
   // Render normal scene
   renderer.render(scene, camera)
