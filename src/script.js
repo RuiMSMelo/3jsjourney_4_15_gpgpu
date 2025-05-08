@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
+import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
 import GUI from 'lil-gui'
 import particlesVertexShader from './shaders/particles/vertex.glsl'
 import particlesFragmentShader from './shaders/particles/fragment.glsl'
@@ -30,35 +31,42 @@ gltfLoader.setDRACOLoader(dracoLoader)
  * Sizes
  */
 const sizes = {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    pixelRatio: Math.min(window.devicePixelRatio, 2)
+  width: window.innerWidth,
+  height: window.innerHeight,
+  pixelRatio: Math.min(window.devicePixelRatio, 2),
 }
 
-window.addEventListener('resize', () =>
-{
-    // Update sizes
-    sizes.width = window.innerWidth
-    sizes.height = window.innerHeight
-    sizes.pixelRatio = Math.min(window.devicePixelRatio, 2)
+window.addEventListener('resize', () => {
+  // Update sizes
+  sizes.width = window.innerWidth
+  sizes.height = window.innerHeight
+  sizes.pixelRatio = Math.min(window.devicePixelRatio, 2)
 
-    // Materials
-    particles.material.uniforms.uResolution.value.set(sizes.width * sizes.pixelRatio, sizes.height * sizes.pixelRatio)
+  // Materials
+  particles.material.uniforms.uResolution.value.set(
+    sizes.width * sizes.pixelRatio,
+    sizes.height * sizes.pixelRatio
+  )
 
-    // Update camera
-    camera.aspect = sizes.width / sizes.height
-    camera.updateProjectionMatrix()
+  // Update camera
+  camera.aspect = sizes.width / sizes.height
+  camera.updateProjectionMatrix()
 
-    // Update renderer
-    renderer.setSize(sizes.width, sizes.height)
-    renderer.setPixelRatio(sizes.pixelRatio)
+  // Update renderer
+  renderer.setSize(sizes.width, sizes.height)
+  renderer.setPixelRatio(sizes.pixelRatio)
 })
 
 /**
  * Camera
  */
 // Base camera
-const camera = new THREE.PerspectiveCamera(35, sizes.width / sizes.height, 0.1, 100)
+const camera = new THREE.PerspectiveCamera(
+  35,
+  sizes.width / sizes.height,
+  0.1,
+  100
+)
 camera.position.set(4.5, 4, 11)
 scene.add(camera)
 
@@ -70,8 +78,8 @@ controls.enableDamping = true
  * Renderer
  */
 const renderer = new THREE.WebGLRenderer({
-    canvas: canvas,
-    antialias: true,
+  canvas: canvas,
+  antialias: true,
 })
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(sizes.pixelRatio)
@@ -80,33 +88,60 @@ debugObject.clearColor = '#29191f'
 renderer.setClearColor(debugObject.clearColor)
 
 /**
+ * Base geometry
+ */
+const baseGeometry = {}
+baseGeometry.instance = new THREE.SphereGeometry(3)
+baseGeometry.count = baseGeometry.instance.attributes.position.count
+
+/**
+ * GPU Compute
+ */
+// Setup
+const gpgpu = {}
+gpgpu.size = Math.ceil(Math.sqrt(baseGeometry.count))
+gpgpu.computation = new GPUComputationRenderer(gpgpu.size, gpgpu.size, renderer)
+
+// Base particles
+const baseParticlesTexture = gpgpu.computation.createTexture()
+console.log(baseParticlesTexture)
+
+/**
  * Particles
  */
 const particles = {}
 
-// Geometry
-particles.geometry = new THREE.SphereGeometry(3)
-
 // Material
 particles.material = new THREE.ShaderMaterial({
-    vertexShader: particlesVertexShader,
-    fragmentShader: particlesFragmentShader,
-    uniforms:
-    {
-        uSize: new THREE.Uniform(0.4),
-        uResolution: new THREE.Uniform(new THREE.Vector2(sizes.width * sizes.pixelRatio, sizes.height * sizes.pixelRatio))
-    }
+  vertexShader: particlesVertexShader,
+  fragmentShader: particlesFragmentShader,
+  uniforms: {
+    uSize: new THREE.Uniform(0.4),
+    uResolution: new THREE.Uniform(
+      new THREE.Vector2(
+        sizes.width * sizes.pixelRatio,
+        sizes.height * sizes.pixelRatio
+      )
+    ),
+  },
 })
 
 // Points
-particles.points = new THREE.Points(particles.geometry, particles.material)
+particles.points = new THREE.Points(baseGeometry.instance, particles.material)
 scene.add(particles.points)
 
 /**
  * Tweaks
  */
-gui.addColor(debugObject, 'clearColor').onChange(() => { renderer.setClearColor(debugObject.clearColor) })
-gui.add(particles.material.uniforms.uSize, 'value').min(0).max(1).step(0.001).name('uSize')
+gui.addColor(debugObject, 'clearColor').onChange(() => {
+  renderer.setClearColor(debugObject.clearColor)
+})
+gui
+  .add(particles.material.uniforms.uSize, 'value')
+  .min(0)
+  .max(1)
+  .step(0.001)
+  .name('uSize')
 
 /**
  * Animate
@@ -114,20 +149,19 @@ gui.add(particles.material.uniforms.uSize, 'value').min(0).max(1).step(0.001).na
 const clock = new THREE.Clock()
 let previousTime = 0
 
-const tick = () =>
-{
-    const elapsedTime = clock.getElapsedTime()
-    const deltaTime = elapsedTime - previousTime
-    previousTime = elapsedTime
-    
-    // Update controls
-    controls.update()
+const tick = () => {
+  const elapsedTime = clock.getElapsedTime()
+  const deltaTime = elapsedTime - previousTime
+  previousTime = elapsedTime
 
-    // Render normal scene
-    renderer.render(scene, camera)
+  // Update controls
+  controls.update()
 
-    // Call tick again on the next frame
-    window.requestAnimationFrame(tick)
+  // Render normal scene
+  renderer.render(scene, camera)
+
+  // Call tick again on the next frame
+  window.requestAnimationFrame(tick)
 }
 
 tick()
